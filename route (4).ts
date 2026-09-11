@@ -1,3 +1,3 @@
 import { NextResponse } from "next/server";
-import { getPublicRecord } from "@/lib/service-record";
-export async function GET(req: Request) { const id = new URL(req.url).searchParams.get("id"); if (!id) return NextResponse.json({ error: "ID requerido" }, { status: 400 }); const record = await getPublicRecord(id); return record ? NextResponse.json(record) : NextResponse.json({ error: "Servicio no encontrado" }, { status: 404 }); }
+import { prisma } from "@/lib/prisma";
+export async function POST(req: Request) { const body = await req.json(); const paymentId = body?.data?.id ?? body?.id; if (paymentId && body.type === "payment") await prisma.payment.updateMany({ where: { mercadoPagoId: String(paymentId) }, data: { status: "PAID", paidAt: new Date() } }); return NextResponse.json({ received: true }); }

@@ -1,4 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createPaymentPreference } from "@/lib/payments";
-export async function POST(req: Request) { const { serviceRecordId, type, amount } = await req.json(); if (!serviceRecordId || !amount) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 }); const payment = await prisma.payment.create({ data: { serviceRecordId, type: type ?? "BALANCE", amount } }); const preference = await createPaymentPreference({ recordId: serviceRecordId, paymentId: payment.id, title: type === "DOWN_PAYMENT" ? "Anticipo de servicio" : "Saldo final", amount: Number(amount) }); await prisma.payment.update({ where: { id: payment.id }, data: { preferenceId: preference.id } }); return NextResponse.json({ id: preference.id, initPoint: preference.init_point }); }
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const required = ["customerName", "make", "model", "year", "licensePlate", "concept", "price"];
+    if (required.some((field) => !body[field])) return NextResponse.json({ error: "Completa todos los campos requeridos." }, { status: 400 });
+
+    const publicId = `SR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+    const record = await prisma.serviceRecord.create({
+      data: {
+        publicId,
+        customer: { create: { name: body.customerName, email: body.email || null, phone: body.phone || null } },
+        vehicle: { create: { make: body.make, model: body.model, year: Number(body.year), vin: body.vin || null, licensePlate: body.licensePlate } },
+        tasks: { create: { concept: body.concept, price: Number(body.price), description: body.description || null } },
+      },
+    });
+    return NextResponse.json({ publicId: record.publicId }, { status: 201 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "No se pudo crear el servicio." }, { status: 500 });
+  }
+}
