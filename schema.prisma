@@ -7,10 +7,29 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum TaskStatus { PENDING IN_PROGRESS WAITING_PARTS COMPLETED }
-enum PaymentStatus { PENDING PAID FAILED CANCELLED }
-enum PaymentType { DOWN_PAYMENT BALANCE }
-enum NotificationChannel { EMAIL SMS }
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  WAITING_PARTS
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum PaymentType {
+  DOWN_PAYMENT
+  BALANCE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
 
 model Customer {
   id String @id @default(cuid())
