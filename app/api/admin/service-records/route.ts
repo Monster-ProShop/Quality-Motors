@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { shopDate } from "@/lib/shop-date";
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -15,6 +16,17 @@ export async function POST(request: Request) {
   }
   try {
     const record = await prisma.$transaction(async tx => {
+      const day = shopDate();
+      // Serialize daily numbering across server instances until this transaction commits.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(74201, ${Number(day)}::integer)`;
+      const prefix = `QM-${day}-`;
+      const latest = await tx.serviceRecord.findFirst({
+        where: { publicId: { startsWith: prefix } },
+        orderBy: { publicId: "desc" }, select: { publicId: true },
+      });
+      const sequence = latest ? Number(latest.publicId.slice(prefix.length)) + 1 : 1;
+      if (!Number.isInteger(sequence) || sequence > 9999) throw new Error("Daily service ID capacity reached");
+      const publicId = prefix + String(sequence).padStart(4, "0");
       const customer = await tx.customer.create({ data: {
         name: body.customerName.trim(),
         email: typeof body.email === "string" ? body.email.trim() || null : null,
@@ -26,11 +38,12 @@ export async function POST(request: Request) {
         vin: typeof body.vin === "string" ? body.vin.trim() || null : null,
       } });
       return tx.serviceRecord.create({ data: {
-        publicId: `SR-${new Date().getFullYear()}-${randomUUID()}`,
+        publicId,
         customerId: customer.id, vehicleId: vehicle.id,
         tasks: { create: { concept: body.concept.trim(), price: Number(body.price) } },
       } });
     });
+    revalidatePath("/admin");
     return NextResponse.json({ publicId: record.publicId }, { status: 201 });
   } catch (error) {
     console.error("Service creation failed", error);
