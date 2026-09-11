@@ -32,110 +32,85 @@ enum NotificationChannel {
 }
 
 model Customer {
-  id             String          @id @default(cuid())
-  name           String
-  email          String?
-  phone          String?
-  createdAt      DateTime        @default(now())
-  vehicles       Vehicle[]
+  id String @id @default(cuid())
+  name String
+  email String?
+  phone String?
+  createdAt DateTime @default(now())
+  vehicles Vehicle[]
   serviceRecords ServiceRecord[]
 }
-
 model Vehicle {
-  id             String          @id @default(cuid())
-  make           String
-  model          String
-  year           Int
-  vin            String?
-  licensePlate   String
-  customerId     String
-
-  customer       Customer        @relation(fields: [customerId], references: [id])
+  id String @id @default(cuid())
+  make String
+  model String
+  year Int
+  vin String?
+  licensePlate String
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id])
   serviceRecords ServiceRecord[]
-
   @@index([licensePlate])
 }
-
 model ServiceRecord {
-  id            String            @id @default(cuid())
-  publicId      String            @unique
-  entryDate     DateTime          @default(now())
-  exitDate      DateTime?
-  notes         String?
-  customerId    String
-  vehicleId     String
-
-  customer      Customer          @relation(fields: [customerId], references: [id])
-  vehicle       Vehicle           @relation(fields: [vehicleId], references: [id])
-  tasks         ServiceTask[]
-  payments      Payment[]
+  id String @id @default(cuid())
+  publicId String @unique // human-facing SR-2026-00001 identifier
+  entryDate DateTime @default(now())
+  exitDate DateTime?
+  notes String?
+  customerId String
+  vehicleId String
+  customer Customer @relation(fields: [customerId], references: [id])
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+  tasks ServiceTask[]
+  payments Payment[]
   notifications NotificationLog[]
-
   @@index([customerId])
-  @@index([vehicleId])
 }
-
 model ServiceTask {
-  id             String         @id @default(cuid())
-  concept        String
-  description    String?
-  price          Decimal        @db.Decimal(12, 2)
-  status         TaskStatus     @default(PENDING)
+  id String @id @default(cuid())
+  concept String
+  description String?
+  price Decimal @db.Decimal(12, 2)
+  status TaskStatus @default(PENDING)
   serviceRecordId String
-
-  serviceRecord  ServiceRecord  @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)
-  images         ServiceImage[]
-  updatedAt      DateTime       @updatedAt
-
-  @@index([serviceRecordId])
+  serviceRecord ServiceRecord @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)
+  images ServiceImage[]
+  updatedAt DateTime @updatedAt
 }
-
 model ServiceImage {
-  id        String      @id @default(cuid())
-  url       String
-  alt       String?
-  taskId    String
-
-  task      ServiceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  createdAt DateTime    @default(now())
-
-  @@index([taskId])
+  id String @id @default(cuid())
+  url String
+  alt String?
+  taskId String
+  task ServiceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 }
-
 model Payment {
-  id             String        @id @default(cuid())
-  type           PaymentType
-  amount         Decimal       @db.Decimal(12, 2)
-  status         PaymentStatus  @default(PENDING)
-  mercadoPagoId  String?
-  preferenceId   String?
+  id String @id @default(cuid())
+  type PaymentType
+  amount Decimal @db.Decimal(12, 2)
+  status PaymentStatus @default(PENDING)
+  mercadoPagoId String?
+  preferenceId String?
   serviceRecordId String
-  createdAt      DateTime      @default(now())
-  paidAt         DateTime?
-
-  serviceRecord  ServiceRecord  @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)
-
-  @@index([serviceRecordId])
+  serviceRecord ServiceRecord @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  paidAt DateTime?
   @@index([mercadoPagoId])
-  @@index([preferenceId])
 }
-
 model NotificationLog {
-  id             String             @id @default(cuid())
-  channel        NotificationChannel
-  template       String
-  recipient      String
+  id String @id @default(cuid())
+  channel NotificationChannel
+  template String
+  recipient String
   serviceRecordId String
-  sentAt         DateTime           @default(now())
-
-  serviceRecord  ServiceRecord      @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)
-
-  @@index([serviceRecordId])
+  serviceRecord ServiceRecord @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)
+  sentAt DateTime @default(now())
 }
-
 model AdminUser {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id String @id @default(cuid())
+  email String @unique
   passwordHash String
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 }

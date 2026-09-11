@@ -1,0 +1,4 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { createPaymentPreference } from "@/lib/payments";
+export async function POST(req: Request) { const { serviceRecordId, type, amount } = await req.json(); if (!serviceRecordId || !amount) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 }); const payment = await prisma.payment.create({ data: { serviceRecordId, type: type ?? "BALANCE", amount } }); const preference = await createPaymentPreference({ recordId: serviceRecordId, paymentId: payment.id, title: type === "DOWN_PAYMENT" ? "Anticipo de servicio" : "Saldo final", amount: Number(amount) }); await prisma.payment.update({ where: { id: payment.id }, data: { preferenceId: preference.id } }); return NextResponse.json({ id: preference.id, initPoint: preference.init_point }); }
