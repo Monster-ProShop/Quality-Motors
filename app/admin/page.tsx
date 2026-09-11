@@ -1,3 +1,5 @@
+import { currentStaff } from "@/lib/staff";
+import { progress } from "@/lib/progress";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { shopDate } from "@/lib/shop-date";
@@ -6,6 +8,7 @@ export const dynamic = "force-dynamic";
 const money = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
 export default async function Admin() {
+  const user = await currentStaff();
   const records = await prisma.serviceRecord.findMany({
     orderBy: [{ entryDate: "desc" }, { id: "desc" }],
     include: { customer: true, vehicle: true, tasks: true, payments: true },
@@ -27,7 +30,7 @@ export default async function Admin() {
   return <main className="mx-auto max-w-6xl px-6 py-12">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div><p className="muted">PANEL DE TALLER</p><h1 className="text-4xl font-bold">Operación y servicios</h1></div>
-      <Link href="/admin/records/new" className="btn">Nuevo servicio</Link>
+      {user?.role === "ADMIN" && <Link href="/admin/records/new" className="btn">Nuevo servicio</Link>}
     </div>
     <div className="mt-10 grid gap-4 md:grid-cols-3">
       {stats.map(([label, count]) => <div className="card" key={label}><p className="muted">{label}</p><p className="mt-2 text-3xl font-bold">{count}</p></div>)}
@@ -38,11 +41,11 @@ export default async function Admin() {
         <div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm">
           <thead className="muted"><tr>{["Servicio / ingreso", "Cliente", "Vehículo", "Estado", "Cotización", "Saldo", ""].map((label, i) => <th className="p-3" key={i}>{label}</th>)}</tr></thead>
           <tbody>{rows.map(({ record, total, balance, status }) => <tr key={record.id} className="border-t border-slate-700">
-            <td className="p-3"><Link className="text-rose-300" href={`/portal/${encodeURIComponent(record.publicId)}`}>{record.publicId}</Link><p className="muted mt-1">{record.entryDate.toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })}</p></td>
+            <td className="p-3"><Link className="text-rose-300" href={`/admin/records/${encodeURIComponent(record.publicId)}`}>{record.publicId}</Link><p className="muted mt-1">{record.entryDate.toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })}</p></td>
             <td className="p-3">{record.customer.name}</td>
             <td className="p-3">{record.vehicle.make} {record.vehicle.model} {record.vehicle.year}<p className="muted">{record.vehicle.licensePlate}</p></td>
-            <td className="p-3">{status}</td><td className="p-3 whitespace-nowrap">{money(total)}</td><td className="p-3 whitespace-nowrap">{money(balance)}</td>
-            <td className="p-3"><Link className="text-rose-300 whitespace-nowrap" href={`/portal/${encodeURIComponent(record.publicId)}`}>Ver servicio →</Link></td>
+            <td className="p-3">{status}<p className="muted">{progress(record.tasks).percent}% completado</p></td><td className="p-3 whitespace-nowrap">{money(total)}</td><td className="p-3 whitespace-nowrap">{money(balance)}</td>
+            <td className="p-3"><Link className="text-rose-300 whitespace-nowrap" href={`/admin/records/${encodeURIComponent(record.publicId)}`}>Ver servicio →</Link></td>
           </tr>)}</tbody>
         </table></div>}
     </section>

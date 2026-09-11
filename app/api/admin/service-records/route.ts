@@ -1,17 +1,18 @@
+import { requireStaff } from "@/lib/staff";
 import { shopDate } from "@/lib/shop-date";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
+  try { await requireStaff(request, true); } catch { return NextResponse.json({error:"Acceso denegado"},{status:403}); }
   let body;
   try { body = await request.json(); } catch {
     return NextResponse.json({ error: "Solicitud inválida." }, { status: 400 });
   }
   const fields = ["customerName", "make", "model", "licensePlate", "concept"];
   if (!body || fields.some(key => typeof body[key] !== "string" || !body[key].trim() || body[key].length > 1000)
-      || !Number.isInteger(Number(body.year)) || Number(body.year) < 1886 || Number(body.year) > new Date().getFullYear() + 2
-      || body.price === "" || body.price == null || !Number.isFinite(Number(body.price)) || Number(body.price) < 0) {
+      || !Number.isInteger(Number(body.year)) || Number(body.year) < 1886 || Number(body.year) > new Date().getFullYear() + 2 ) {
     return NextResponse.json({ error: "Revisa los campos obligatorios, el año y el precio." }, { status: 400 });
   }
   try {
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
       return tx.serviceRecord.create({ data: {
         publicId,
         customerId: customer.id, vehicleId: vehicle.id,
-        tasks: { create: { concept: body.concept.trim(), price: Number(body.price) } },
+        notes: body.concept.trim(),
       } });
     });
     revalidatePath("/admin");

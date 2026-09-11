@@ -82,6 +82,9 @@ model ServiceImage {
   id String @id @default(cuid())
   url String
   alt String?
+  kind String @default("BEFORE")
+  storageId String?
+  expiresAt DateTime?
   taskId String
   task ServiceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -112,5 +115,9 @@ model AdminUser {
   id String @id @default(cuid())
   email String @unique
   passwordHash String
+  role String @default("ADMIN")
+  active Boolean @default(true)
+  loginFailures Int @default(0)
+  lockedUntil DateTime?
   createdAt DateTime @default(now())
 }

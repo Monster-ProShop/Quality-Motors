@@ -1,0 +1,22 @@
+name: Remove expired task photos
+on:
+  schedule:
+    - cron: "20 9 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete expired photos
+        env:
+          APP_URL: ${{ secrets.QM_APP_URL }}
+          CLEANUP_SECRET: ${{ secrets.QM_CLEANUP_SECRET }}
+        run: |
+          test -n "$APP_URL" && test -n "$CLEANUP_SECRET"
+          for batch in $(seq 1 100); do
+            result=$(curl --fail-with-body --silent --show-error --max-time 300 -X POST -H "Authorization: Bearer $CLEANUP_SECRET" "$APP_URL/api/maintenance/photos")
+            echo "$result"
+            [ "$(echo "$result" | jq -r '.more')" = "true" ] || break
+          done
