@@ -10,6 +10,7 @@ const money = (value: number) => new Intl.NumberFormat("es-MX", { style: "curren
 export default async function Admin() {
   const user = await currentStaff();
   const records = await prisma.serviceRecord.findMany({
+    where: { deletedAt: null },
     orderBy: [{ entryDate: "desc" }, { id: "desc" }],
     include: { customer: true, vehicle: true, tasks: true, payments: true },
   });

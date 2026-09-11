@@ -1,3 +1,4 @@
+import ServiceSettings from "@/components/service-settings";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { currentStaff } from "@/lib/staff";
@@ -14,6 +15,6 @@ export default async function Record({params}:{params:Promise<{id:string}>}) {
     <p className="muted mt-2">{record.customer.name} · {record.vehicle.licensePlate}</p>
     <p className="mt-3">Motivo de ingreso: {record.notes||"Sin notas"}</p>
     <div className="card my-6"><p>{p.completed} de {p.total} tareas completadas · {p.percent}%</p><progress className="mt-2 w-full accent-rose-700" value={p.percent} max="100"/><p className="mt-2">Cotización: {total.toLocaleString("es-MX",{style:"currency",currency:"MXN"})}</p><Link className="text-rose-300" href={`/portal/${id}`}>Ver como cliente →</Link></div>
-    <TaskEditor recordId={id} admin={user?.role==="ADMIN"} tasks={record.tasks.map(t=>({...t,price:t.price.toString(),images:t.images.map(i=>({id:i.id,url:i.url,kind:i.kind}))}))}/>
+    {user?.role==="ADMIN"&&<ServiceSettings id={id} notes={record.notes} vehicle={{make:record.vehicle.make,model:record.vehicle.model,year:record.vehicle.year,licensePlate:record.vehicle.licensePlate}}/>}<TaskEditor recordId={id} admin={user?.role==="ADMIN"} tasks={record.tasks.map(t=>({...t,price:t.price.toString(),images:t.images.map(i=>({id:i.id,url:i.url,kind:i.kind}))}))}/>
   </main>;
 }

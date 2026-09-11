@@ -1,5 +1,20 @@
 # Task workflow activation
 
+## Latest permissions and local test login
+
+Set QM_LOCAL_TEST_USERS=true in .env.local and run npm run dev -- --hostname 127.0.0.1.
+Local development accepts admin/admin and Juan/listo. These accounts are disabled
+in production even if the flag is present. They do not provision hosted accounts.
+
+Workers may add unpriced tasks and BEFORE photos only. They cannot change
+existing tasks, statuses, prices, services, or AFTER photos. Admins assign
+prices; unpriced work is labeled Pending quote and omitted from the quoted
+subtotal until priced. The initial database value zero is not a quote.
+
+Admin service deletion is recoverable: deletedAt hides the record from the
+dashboard and customer portal, preserving its data in the database.
+The new priced and deletedAt columns also require npm run db:push.
+
 This branch adds staff login and database columns. Configure it before promoting to main.
 
 1. Set Render secrets DATABASE_URL and NEXTAUTH_SECRET (random 32+ characters).

@@ -22,7 +22,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string}>
       } catch {}
       photos.push({kind:image.kind,bytes});
     }
-    data.tasks.push({concept:task.concept,description:task.description||"",price:Number(task.price),status:task.status,photos});
+    data.tasks.push({concept:task.concept,description:task.description||"",price:Number(task.price),priced:task.priced,status:task.status,photos});
   }
   const pdf=await createReport(data,await readFile(path.join(process.cwd(),"public/quality-motors-logo.png")));
   return new Response(Buffer.from(pdf),{headers:{"Content-Type":"application/pdf","Content-Disposition":`attachment; filename="${record.publicId.replace(/[^a-zA-Z0-9-]/g,"")}.pdf"`,"Cache-Control":"private, no-store"}});

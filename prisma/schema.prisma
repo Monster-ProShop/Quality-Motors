@@ -57,6 +57,7 @@ model ServiceRecord {
   publicId String @unique // human-facing SR-2026-00001 identifier
   entryDate DateTime @default(now())
   exitDate DateTime?
+  deletedAt DateTime?
   notes String?
   customerId String
   vehicleId String
@@ -72,6 +73,7 @@ model ServiceTask {
   concept String
   description String?
   price Decimal @db.Decimal(12, 2)
+  priced Boolean @default(true)
   status TaskStatus @default(PENDING)
   serviceRecordId String
   serviceRecord ServiceRecord @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)

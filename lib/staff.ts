@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual, scryptSync, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { prisma } from "./prisma";
+import { localTesting, localUsers } from "./local-test-users";
 
 export function passwordHash(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -14,7 +15,7 @@ export function verifyPassword(password: string, hash: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 function sign(value: string) {
-  const secret = process.env.NEXTAUTH_SECRET;
+  const secret = process.env.NEXTAUTH_SECRET || (localTesting() ? "quality-motors-local-development-only-secret" : undefined);
   if (!secret || secret.length < 32) throw new Error("Configure NEXTAUTH_SECRET (32+ characters)");
   return createHmac("sha256", secret).update(value).digest("hex");
 }
@@ -32,6 +33,10 @@ export async function currentStaff() {
     if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return null;
     const data = JSON.parse(Buffer.from(payload, "base64url").toString());
     if (data.expires < Date.now()) return null;
+    if(localTesting()) {
+      const local=localUsers.find(u=>u.id===data.id);
+      if(local)return {id:local.id,email:local.email,role:local.role};
+    }
     return await prisma.adminUser.findFirst({ where: { id: data.id, active: true }, select: { id: true, email: true, role: true } });
   } catch { return null; }
 }

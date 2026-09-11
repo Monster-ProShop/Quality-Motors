@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { progress, statuses } from "./progress";
 type Photo = {kind:string;bytes?:Uint8Array};
-export type ReportData = {id:string;customer:string;vehicle:string;entry:string;notes:string;paid:number;tasks:{concept:string;description:string;price:number;status:string;photos:Photo[]}[]};
+export type ReportData = {id:string;customer:string;vehicle:string;entry:string;notes:string;paid:number;tasks:{concept:string;description:string;price:number;priced?:boolean;status:string;photos:Photo[]}[]};
 export async function createReport(data:ReportData,logo:Uint8Array) {
   const doc=await PDFDocument.create();
   const normal=await doc.embedFont(StandardFonts.Helvetica),bold=await doc.embedFont(StandardFonts.HelveticaBold),brand=await doc.embedPng(logo);
@@ -37,6 +37,7 @@ export async function createReport(data:ReportData,logo:Uint8Array) {
   text(`Avance: ${p.percent}% - ${p.completed} de ${p.total} tareas completadas`,13,true);
   const total=data.tasks.reduce((s,t)=>s+t.price,0);
   text("Cotización: "+money(total),16,true);
+  if(data.tasks.some(t=>t.priced===false))text("Cotización parcial: hay tareas pendientes de precio.");
   text("Pagado: "+money(data.paid)+" | Saldo: "+money(Math.max(0,total-data.paid)));
   text("Evidencia fotográfica disponible durante 6 meses desde su carga.");
   text("Este reporte refleja el estado al momento de descargarlo. No es una factura.");
@@ -44,7 +45,7 @@ export async function createReport(data:ReportData,logo:Uint8Array) {
   for(let index=0;index<data.tasks.length;index++) {
     const task=data.tasks[index];next();
     text(`Tarea ${index+1}: ${task.concept}`,17,true);
-    text((statuses[task.status]||task.status)+" | "+money(task.price),12,true);
+    text((statuses[task.status]||task.status)+" | "+(task.priced===false?"Pendiente de cotizar":money(task.price)),12,true);
     text(task.description||"Sin observaciones adicionales.");
     for(const photo of task.photos) {
       if(y<330)next();
