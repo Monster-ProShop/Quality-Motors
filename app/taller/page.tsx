@@ -1,14 +1,10 @@
 import { redirect } from 'next/navigation';
-import { configured } from '@/lib/supabase/client';
-import { serverDb } from '@/lib/supabase/server';
-import { Setup } from '@/components/ui';
+import { auth } from '@/lib/auth/server';
 import { Dashboard } from '@/components/dashboard';
+export const dynamic = 'force-dynamic';
 export default async function Page() {
-  if (!configured()) return <Setup />;
-  const db = await serverDb();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
+  const { data } = await auth.getSession();
+  const user = data?.user;
   if (!user) redirect('/login');
-  return <Dashboard email={user.email || ''} />;
+  return <Dashboard email={user.email} />;
 }

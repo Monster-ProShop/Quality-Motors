@@ -1,9 +1,15 @@
--- Quality Motors. Instalar una sola vez en un proyecto Supabase nuevo.
--- No borra ni transforma tablas o registros de la aplicación anterior.
+-- Quality Motors. Instalación inicial para una rama de Neon.
+-- Conserva las tablas heredadas con nombres en PascalCase.
 begin;
+do $$ begin
+ if not exists(select 1 from pg_roles where rolname='quality_motors_app') then
+  create role quality_motors_app nologin noinherit;
+ end if;
+ execute format('grant quality_motors_app to %I', current_user);
+end $$;
 create schema if not exists private;
 revoke all on schema private from public;
-grant usage on schema private to anon, authenticated;
+grant usage on schema public, private to quality_motors_app;
 
 create table public.workshops (
  id uuid primary key default gen_random_uuid(),
@@ -11,13 +17,13 @@ create table public.workshops (
  created_at timestamptz not null default now()
 );
 create table public.profiles (
- id uuid primary key references auth.users(id) on delete cascade,
+ id uuid primary key references neon_auth.user(id) on delete cascade,
  full_name text not null default '',
  created_at timestamptz not null default now()
 );
 create table public.workshop_members (
  workshop_id uuid not null references public.workshops(id),
- user_id uuid not null references auth.users(id) on delete cascade,
+ user_id uuid not null references neon_auth.user(id) on delete cascade,
  role text not null check (role in ('admin','worker')),
  primary key(workshop_id,user_id)
 );
@@ -33,7 +39,7 @@ create table public.clients (
 create table public.client_accounts (
  workshop_id uuid not null,
  client_id uuid not null,
- user_id uuid not null references auth.users(id) on delete cascade,
+ user_id uuid not null references neon_auth.user(id) on delete cascade,
  primary key(workshop_id,client_id,user_id),
  foreign key(workshop_id,client_id) references public.clients(workshop_id,id)
 );
@@ -114,7 +120,7 @@ create table public.invitations (
  token_hash text not null unique,
  expires_at timestamptz not null default now() + interval '7 days',
  used_at timestamptz,
- created_by uuid not null references auth.users(id),
+ created_by uuid not null references neon_auth.user(id),
  foreign key(workshop_id,client_id) references public.clients(workshop_id,id),
  check((role = 'client') = (client_id is not null))
 );
@@ -129,7 +135,7 @@ create table public.order_events (
  id bigint generated always as identity primary key,
  workshop_id uuid not null,
  order_id uuid not null,
- actor_id uuid references auth.users(id),
+ actor_id uuid references neon_auth.user(id),
  event text not null,
  created_at timestamptz not null default now(),
  foreign key(workshop_id,order_id) references public.orders(workshop_id,id)
@@ -142,7 +148,7 @@ create table public.stock_movements (
  order_id uuid,
  delta integer not null check(delta <> 0),
  reason text not null,
- actor_id uuid references auth.users(id),
+ actor_id uuid references neon_auth.user(id),
  created_at timestamptz not null default now(),
  foreign key(workshop_id,product_id) references public.inventory(workshop_id,id),
  foreign key(workshop_id,order_id) references public.orders(workshop_id,id)
@@ -151,15 +157,19 @@ create index on public.stock_movements(workshop_id,product_id);
 create index on public.stock_movements(workshop_id,order_id);
 
 -- Las funciones privilegiadas viven fuera del esquema expuesto y fijan search_path.
+create function private.current_user() returns uuid
+language sql stable security invoker set search_path = '' as $$
+ select nullif(current_setting('app.user_id',true),'')::uuid;
+$$;
 create function private.member(w uuid, admin_only boolean default false) returns boolean
 language sql stable security definer set search_path = '' as $$
- select auth.uid() is not null and exists(select 1 from public.workshop_members m
- where m.workshop_id=w and m.user_id=auth.uid() and (not admin_only or m.role='admin'));
+ select private.current_user() is not null and exists(select 1 from public.workshop_members m
+ where m.workshop_id=w and m.user_id=private.current_user() and (not admin_only or m.role='admin'));
 $$;
 create function private.client_access(w uuid, c uuid) returns boolean
 language sql stable security definer set search_path = '' as $$
- select auth.uid() is not null and exists(select 1 from public.client_accounts a
- where a.workshop_id=w and a.client_id=c and a.user_id=auth.uid());
+ select private.current_user() is not null and exists(select 1 from public.client_accounts a
+ where a.workshop_id=w and a.client_id=c and a.user_id=private.current_user());
 $$;
 create function private.order_access(o uuid) returns boolean
 language sql stable security definer set search_path = '' as $$
@@ -173,19 +183,6 @@ language sql stable security definer set search_path = '' as $$
  select order_id from private.order_links where length(t)=64 and token_hash=private.hash_token(t)
  and not revoked and expires_at>now();
 $$;
-create function private.photo_access(p text) returns boolean
-language sql stable security definer set search_path = '' as $$
- select exists(select 1 from public.service_photos f where f.path=p and
- (private.order_access(f.order_id) or f.order_id=private.link_order(
- coalesce(nullif(current_setting('request.headers',true),'')::jsonb->>'x-order-token',''))));
-$$;
-create function private.photo_write(p text) returns boolean
-language sql stable security definer set search_path = '' as $$
- select auth.uid() is not null and exists(select 1 from public.orders o
- where o.workshop_id::text=split_part(p,'/',1) and o.id::text=split_part(p,'/',2)
- and private.member(o.workshop_id));
-$$;
-
 alter table public.workshops enable row level security;
 alter table public.profiles enable row level security;
 alter table public.workshop_members enable row level security;
@@ -200,27 +197,41 @@ alter table public.invitations enable row level security;
 alter table public.order_events enable row level security;
 alter table public.stock_movements enable row level security;
 alter table private.order_links enable row level security;
-create policy talleres_lectura on public.workshops for select to authenticated using(private.member(id));
-create policy perfil_propio on public.profiles for select to authenticated using(id=(select auth.uid()));
-create policy miembros_lectura on public.workshop_members for select to authenticated using(user_id=(select auth.uid()) or private.member(workshop_id,true));
-create policy clientes_lectura on public.clients for select to authenticated using(private.member(workshop_id) or private.client_access(workshop_id,id));
-create policy vinculos_lectura on public.client_accounts for select to authenticated using(user_id=(select auth.uid()) or private.member(workshop_id,true));
-create policy vehiculos_lectura on public.vehicles for select to authenticated using(private.member(workshop_id) or private.client_access(workshop_id,client_id));
-create policy inventario_lectura on public.inventory for select to authenticated using(private.member(workshop_id));
-create policy ordenes_lectura on public.orders for select to authenticated using(private.order_access(id));
-create policy conceptos_lectura on public.service_items for select to authenticated using(private.order_access(order_id));
-create policy fotos_lectura on public.service_photos for select to authenticated using(private.order_access(order_id));
-create policy invitaciones_lectura on public.invitations for select to authenticated using(private.member(workshop_id,true));
-create policy eventos_lectura on public.order_events for select to authenticated using(private.order_access(order_id));
-create policy movimientos_lectura on public.stock_movements for select to authenticated using(private.member(workshop_id));
+alter table public.workshops force row level security;
+alter table public.profiles force row level security;
+alter table public.workshop_members force row level security;
+alter table public.clients force row level security;
+alter table public.client_accounts force row level security;
+alter table public.vehicles force row level security;
+alter table public.inventory force row level security;
+alter table public.orders force row level security;
+alter table public.service_items force row level security;
+alter table public.service_photos force row level security;
+alter table public.invitations force row level security;
+alter table public.order_events force row level security;
+alter table public.stock_movements force row level security;
+alter table private.order_links force row level security;
+create policy talleres_lectura on public.workshops for select to quality_motors_app using(private.member(id));
+create policy perfil_propio on public.profiles for select to quality_motors_app using(id=(select private.current_user()));
+create policy miembros_lectura on public.workshop_members for select to quality_motors_app using(user_id=(select private.current_user()) or private.member(workshop_id,true));
+create policy clientes_lectura on public.clients for select to quality_motors_app using(private.member(workshop_id) or private.client_access(workshop_id,id));
+create policy vinculos_lectura on public.client_accounts for select to quality_motors_app using(user_id=(select private.current_user()) or private.member(workshop_id,true));
+create policy vehiculos_lectura on public.vehicles for select to quality_motors_app using(private.member(workshop_id) or private.client_access(workshop_id,client_id));
+create policy inventario_lectura on public.inventory for select to quality_motors_app using(private.member(workshop_id));
+create policy ordenes_lectura on public.orders for select to quality_motors_app using(private.order_access(id));
+create policy conceptos_lectura on public.service_items for select to quality_motors_app using(private.order_access(order_id));
+create policy fotos_lectura on public.service_photos for select to quality_motors_app using(private.order_access(order_id));
+create policy invitaciones_lectura on public.invitations for select to quality_motors_app using(private.member(workshop_id,true));
+create policy eventos_lectura on public.order_events for select to quality_motors_app using(private.order_access(order_id));
+create policy movimientos_lectura on public.stock_movements for select to quality_motors_app using(private.member(workshop_id));
 -- No hay escritura directa: todas las mutaciones validan pertenencia y estado.
 revoke all on public.workshops, public.profiles, public.workshop_members, public.clients, public.client_accounts,
  public.vehicles, public.inventory, public.orders, public.service_items, public.service_photos,
- public.invitations, public.order_events, public.stock_movements from anon, authenticated;
+ public.invitations, public.order_events, public.stock_movements from public;
 grant select on public.workshops, public.profiles, public.workshop_members, public.clients, public.client_accounts,
  public.vehicles, public.inventory, public.orders, public.service_items, public.service_photos,
- public.order_events, public.stock_movements to authenticated;
-grant select(id,workshop_id,email,role,client_id,expires_at,used_at,created_by) on public.invitations to authenticated;
+ public.order_events, public.stock_movements to quality_motors_app;
+grant select(id,workshop_id,email,role,client_id,expires_at,used_at,created_by) on public.invitations to quality_motors_app;
 
 create view public.order_totals with (security_invoker=true) as
  select o.*, c.name as client_name, concat(v.make,' ',v.model,' · ',v.plates) as vehicle_label,
@@ -230,7 +241,7 @@ create view public.order_totals with (security_invoker=true) as
  from public.orders o join public.clients c on c.id=o.client_id
  join public.vehicles v on v.id=o.vehicle_id
  left join lateral (select sum(i.amount) subtotal from public.service_items i where i.order_id=o.id) s on true;
-grant select on public.order_totals to authenticated;
+grant select on public.order_totals to quality_motors_app;
 
 create function private.order_json(o uuid) returns jsonb
 language sql stable security definer set search_path = '' as $$
@@ -266,7 +277,7 @@ begin
  where order_id=o and kind='stock' group by product_id,workshop_id order by product_id loop
  update public.inventory set stock=stock+i.qty where id=i.product_id;
  insert into public.stock_movements(workshop_id,product_id,order_id,delta,reason,actor_id)
- values(i.workshop_id,i.product_id,o,i.qty,'Liberación de reserva',auth.uid());
+ values(i.workshop_id,i.product_id,o,i.qty,'Liberación de reserva',private.current_user());
  end loop;
 end; $$;
 
@@ -283,7 +294,7 @@ begin
  if o.status<>'pendiente' then raise exception 'Esta cotización ya no acepta respuestas.'; end if;
  update public.orders set status=decision where id=o.id;
  if decision='rechazada' then perform private.release_stock(o.id); end if;
- insert into public.order_events(workshop_id,order_id,actor_id,event) values(o.workshop_id,o.id,auth.uid(),'Cliente: '||decision);
+ insert into public.order_events(workshop_id,order_id,actor_id,event) values(o.workshop_id,o.id,private.current_user(),'Cliente: '||decision);
 end; $$;
 
 -- API transaccional. El rol nunca se toma de metadatos editables del usuario.
@@ -293,23 +304,23 @@ declare w uuid; oid uuid; cid uuid; vid uuid; pid uuid; result_id uuid; tok text
  o public.orders; i public.service_items; product public.inventory; inv public.invitations;
  n integer; price numeric; target text; member_role text;
 begin
- if auth.uid() is null or not exists(select 1 from auth.users where id=auth.uid() and email_confirmed_at is not null) then
+ if private.current_user() is null or not exists(select 1 from neon_auth.user where id=private.current_user() and "emailVerified") then
  raise exception 'Inicia sesión con un correo confirmado.'; end if;
- insert into public.profiles(id) values(auth.uid()) on conflict do nothing;
+ insert into public.profiles(id) values(private.current_user()) on conflict do nothing;
  if action='create_workshop' then
  insert into public.workshops(name) values(trim(payload->>'name')) returning id into w;
- insert into public.workshop_members values(w,auth.uid(),'admin');
+ insert into public.workshop_members values(w,private.current_user(),'admin');
  return jsonb_build_object('id',w);
  end if;
  if action='accept_invite' then
  select * into inv from public.invitations where token_hash=private.hash_token(payload->>'token') for update;
- select lower(email) into mail from auth.users where id=auth.uid() and email_confirmed_at is not null;
+ select lower(email) into mail from neon_auth.user where id=private.current_user() and "emailVerified";
  if inv.id is null or inv.used_at is not null or inv.expires_at<=now() or mail<>lower(inv.email) then
  raise exception 'La invitación no es válida para este correo o ya venció.'; end if;
  if inv.role='client' then
- insert into public.client_accounts values(inv.workshop_id,inv.client_id,auth.uid()) on conflict do nothing;
+ insert into public.client_accounts values(inv.workshop_id,inv.client_id,private.current_user()) on conflict do nothing;
  else
- insert into public.workshop_members values(inv.workshop_id,auth.uid(),inv.role) on conflict do nothing;
+ insert into public.workshop_members values(inv.workshop_id,private.current_user(),inv.role) on conflict do nothing;
  end if;
  update public.invitations set used_at=now() where id=inv.id;
  return jsonb_build_object('role',inv.role,'workshop_id',inv.workshop_id);
@@ -327,7 +338,7 @@ begin
  if not private.member(w,true) then raise exception 'Sólo administración puede modificar inventario.'; end if;
  n:=(payload->>'stock')::integer;
  insert into public.inventory(workshop_id,sku,name,stock,price) values(w,payload->>'sku',payload->>'name',n,(payload->>'price')::numeric) returning id into pid;
- if n<>0 then insert into public.stock_movements(workshop_id,product_id,delta,reason,actor_id) values(w,pid,n,'Existencia inicial',auth.uid()); end if;
+ if n<>0 then insert into public.stock_movements(workshop_id,product_id,delta,reason,actor_id) values(w,pid,n,'Existencia inicial',private.current_user()); end if;
  return jsonb_build_object('id',pid);
  elsif action='adjust_stock' then
  if not private.member(w,true) then raise exception 'Sólo administración puede modificar inventario.'; end if;
@@ -335,13 +346,13 @@ begin
  if n is null or n=0 or abs(n)>100000 or length(trim(coalesce(payload->>'reason','')))=0 then raise exception 'Indica cantidad y motivo del ajuste.'; end if;
  update public.inventory set stock=stock+n where id=pid and workshop_id=w and stock+n>=0;
  if not found then raise exception 'Producto no válido o existencia insuficiente.'; end if;
- insert into public.stock_movements(workshop_id,product_id,delta,reason,actor_id) values(w,pid,n,left(payload->>'reason',250),auth.uid());
+ insert into public.stock_movements(workshop_id,product_id,delta,reason,actor_id) values(w,pid,n,left(payload->>'reason',250),private.current_user());
  return '{}'::jsonb;
  elsif action='invite' then
  if not private.member(w,true) then raise exception 'Sólo administración puede invitar personas.'; end if;
  tok:=replace(gen_random_uuid()::text||gen_random_uuid()::text,'-','');
  insert into public.invitations(workshop_id,email,role,client_id,token_hash,created_by)
- values(w,lower(trim(payload->>'email')),payload->>'role',nullif(payload->>'client_id','')::uuid,private.hash_token(tok),auth.uid());
+ values(w,lower(trim(payload->>'email')),payload->>'role',nullif(payload->>'client_id','')::uuid,private.hash_token(tok),private.current_user());
  return jsonb_build_object('token',tok);
  elsif action='revoke_invite' then
  if not private.member(w,true) then raise exception 'Sólo administración puede revocar invitaciones.'; end if;
@@ -350,7 +361,7 @@ begin
  elsif action='create_order' then
  insert into public.orders(workshop_id,client_id,vehicle_id,title,notes,tax_rate)
  values(w,(payload->>'client_id')::uuid,(payload->>'vehicle_id')::uuid,payload->>'title',coalesce(payload->>'notes',''),coalesce((payload->>'tax_rate')::numeric,0.16)) returning id into oid;
- insert into public.order_events(workshop_id,order_id,actor_id,event) values(w,oid,auth.uid(),'Cotización creada');
+ insert into public.order_events(workshop_id,order_id,actor_id,event) values(w,oid,private.current_user(),'Cotización creada');
  return jsonb_build_object('id',oid);
  end if;
  oid:=(payload->>'order_id')::uuid;
@@ -367,7 +378,7 @@ begin
  if product.id is null or product.stock<n then raise exception 'No hay suficientes existencias.'; end if;
  price:=product.price;
  update public.inventory set stock=stock-n where id=pid;
- insert into public.stock_movements(workshop_id,product_id,order_id,delta,reason,actor_id) values(w,pid,oid,-n,'Reserva de cotización',auth.uid());
+ insert into public.stock_movements(workshop_id,product_id,order_id,delta,reason,actor_id) values(w,pid,oid,-n,'Reserva de cotización',private.current_user());
  end if;
  insert into public.service_items(workshop_id,order_id,kind,product_id,description,quantity,unit_price,supplier,tracking)
  values(w,oid,payload->>'kind',pid,case when pid is not null then product.name else payload->>'description' end,n,price,nullif(payload->>'supplier',''),nullif(payload->>'tracking',''));
@@ -376,7 +387,7 @@ begin
  delete from public.service_items where id=(payload->>'item_id')::uuid and order_id=oid returning * into i;
  if i.kind='stock' then
  update public.inventory set stock=stock+i.quantity where id=i.product_id;
- insert into public.stock_movements(workshop_id,product_id,order_id,delta,reason,actor_id) values(w,i.product_id,oid,i.quantity,'Concepto eliminado',auth.uid());
+ insert into public.stock_movements(workshop_id,product_id,order_id,delta,reason,actor_id) values(w,i.product_id,oid,i.quantity,'Concepto eliminado',private.current_user());
  end if;
  elsif action='tracking' then
  update public.service_items set supplier=nullif(payload->>'supplier',''),tracking=nullif(payload->>'tracking','')
@@ -388,7 +399,7 @@ begin
  insert into private.order_links(order_id,token_hash,expires_at) values(oid,private.hash_token(tok),now()+interval '30 days')
  on conflict(order_id) do update set token_hash=excluded.token_hash,expires_at=excluded.expires_at,revoked=false;
  if o.status='borrador' then update public.orders set status='pendiente' where id=oid; end if;
- insert into public.order_events(workshop_id,order_id,actor_id,event) values(w,oid,auth.uid(),'Enlace generado o renovado');
+ insert into public.order_events(workshop_id,order_id,actor_id,event) values(w,oid,private.current_user(),'Enlace generado o renovado');
  return jsonb_build_object('token',tok);
  elsif action='revoke_link' then
  update private.order_links set revoked=true where order_id=oid;
@@ -401,36 +412,27 @@ begin
  update private.order_links set revoked=true where order_id=oid;
  end if;
  update public.orders set status=target where id=oid;
- insert into public.order_events(workshop_id,order_id,actor_id,event) values(w,oid,auth.uid(),target);
+ insert into public.order_events(workshop_id,order_id,actor_id,event) values(w,oid,private.current_user(),target);
  elsif action='add_photo' then
  if split_part(payload->>'path','/',1)<>w::text or split_part(payload->>'path','/',2)<>oid::text
- or not exists(select 1 from storage.objects where bucket_id='service-photos' and name=payload->>'path') then raise exception 'Archivo no válido.'; end if;
+ then raise exception 'Archivo no válido.'; end if;
  insert into public.service_photos(workshop_id,order_id,path,caption) values(w,oid,payload->>'path',coalesce(payload->>'caption',''));
  else raise exception 'Operación no válida.';
  end if;
  return '{}'::jsonb;
 end; $$;
 
--- Fachadas sin privilegios propios. PostgREST sólo expone public.
+-- Fachadas para el rol de aplicación. El navegador nunca recibe una conexión SQL.
 create function public.app_mutate(action text,payload jsonb) returns jsonb language sql security invoker set search_path='' as $$ select private.mutate(action,payload); $$;
 create function public.get_order(order_id uuid) returns jsonb language sql stable security invoker set search_path='' as $$ select private.read_order(order_id); $$;
 create function public.get_public_order(token text) returns jsonb language sql stable security invoker set search_path='' as $$ select private.public_order(token); $$;
 create function public.decide_order(order_id uuid,decision text,token text default null) returns void language sql security invoker set search_path='' as $$ select private.decide_order(order_id,decision,token); $$;
 
-revoke all on all functions in schema private from public,anon,authenticated;
-revoke all on function public.app_mutate(text,jsonb),public.get_order(uuid),public.get_public_order(text),public.decide_order(uuid,text,text) from public,anon,authenticated;
-grant execute on function private.member(uuid,boolean),private.client_access(uuid,uuid),private.order_access(uuid),private.mutate(text,jsonb),private.read_order(uuid,text),private.photo_write(text) to authenticated;
-grant execute on function private.public_order(text),private.decide_order(uuid,text,text),private.photo_access(text) to anon,authenticated;
-grant execute on function public.app_mutate(text,jsonb),public.get_order(uuid) to authenticated;
-grant execute on function public.get_public_order(text),public.decide_order(uuid,text,text) to anon,authenticated;
+revoke all on all functions in schema private from public;
+revoke all on function public.app_mutate(text,jsonb),public.get_order(uuid),public.get_public_order(text),public.decide_order(uuid,text,text) from public;
+grant execute on function private.current_user(),private.member(uuid,boolean),private.client_access(uuid,uuid),private.order_access(uuid),private.mutate(text,jsonb),private.read_order(uuid,text) to quality_motors_app;
+grant execute on function private.public_order(text),private.decide_order(uuid,text,text) to quality_motors_app;
+grant execute on function public.app_mutate(text,jsonb),public.get_order(uuid) to quality_motors_app;
+grant execute on function public.get_public_order(text),public.decide_order(uuid,text,text) to quality_motors_app;
 
-insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
- values('service-photos','service-photos',false,8388608,array['image/jpeg','image/png','image/webp']);
-create policy evidencia_lectura on storage.objects for select to anon,authenticated
- using(bucket_id='service-photos' and private.photo_access(name));
-create policy evidencia_subida on storage.objects for insert to authenticated
- with check(bucket_id='service-photos' and private.photo_write(name));
--- Sólo se permite limpiar archivos que todavía no tengan un registro de evidencia.
-create policy evidencia_limpieza on storage.objects for delete to authenticated
- using(bucket_id='service-photos' and private.photo_write(name) and not exists(select 1 from public.service_photos f where f.path=name));
 commit;

@@ -1,7 +1,9 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { browserDb } from '@/lib/supabase/client';
+import { authClient } from '@/lib/auth/client';
+import { mutate } from '@/lib/api';
+import { apiGet } from '@/lib/http';
 import { Badge, Notice, Field } from './ui';
 import { money } from '@/lib/format';
 import type { Order } from '@/types/domain';
@@ -10,26 +12,9 @@ export function Account({ email }: { email: string }) {
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   useEffect(() => {
-    const db = browserDb();
-    void db
-      .from('client_accounts')
-      .select('client_id')
-      .then(async ({ data, error }) => {
-        if (error) {
-          setError('No pudimos cargar tu cuenta.');
-          return;
-        }
-        const ids = (data || []).map((x) => x.client_id);
-        if (ids.length) {
-          const result = await db
-            .from('order_totals')
-            .select('*')
-            .in('client_id', ids)
-            .order('created_at', { ascending: false });
-          if (result.error) setError('No pudimos cargar tus órdenes.');
-          else setOrders(result.data || []);
-        }
-      });
+    void apiGet<{ orders: Order[] }>('/api/app?resource=account')
+      .then((data) => setOrders(data.orders))
+      .catch(() => setError('No pudimos cargar tu cuenta.'));
   }, []);
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-10">
@@ -48,7 +33,7 @@ export function Account({ email }: { email: string }) {
           <button
             className="btn-secondary"
             onClick={async () => {
-              await browserDb().auth.signOut();
+              await authClient.signOut();
               location.assign('/login');
             }}
           >
@@ -93,11 +78,7 @@ export function Account({ email }: { email: string }) {
           setError('');
           const name = String(new FormData(e.currentTarget).get('name'));
           try {
-            const { error } = await browserDb().rpc('app_mutate', {
-              action: 'create_workshop',
-              payload: { name },
-            });
-            if (error) throw error;
+            await mutate('create_workshop', { name });
             location.assign('/taller');
           } catch {
             setError('No pudimos crear el taller. Confirma tu correo e intenta de nuevo.');

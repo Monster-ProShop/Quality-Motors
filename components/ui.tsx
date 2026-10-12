@@ -38,8 +38,8 @@ export function Setup() {
     <main className="mx-auto max-w-xl px-5 py-20">
       <h1 className="mb-4 text-3xl font-bold">Conecta tu taller</h1>
       <Notice>
-        Falta configurar Supabase. Sigue el README del proyecto, instala schema.sql en una base
-        nueva y agrega la URL y la clave publicable a .env.local. Después reinicia la aplicación.
+        Falta configurar Neon. Sigue el README del proyecto, despliega la configuración y el esquema
+        en una rama de Neon, y agrega las variables a .env.local. Después reinicia la aplicación.
       </Notice>
       <a href="/" className="btn-secondary mt-5">
         Volver al inicio

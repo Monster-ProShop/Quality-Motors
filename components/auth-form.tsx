@@ -1,6 +1,6 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { browserDb } from '@/lib/supabase/client';
+import { authClient } from '@/lib/auth/client';
 import { Field, Notice } from './ui';
 export function AuthForm({ initialSignup = false }: { initialSignup?: boolean }) {
   const [signup, setSignup] = useState(initialSignup),
@@ -16,16 +16,15 @@ export function AuthForm({ initialSignup = false }: { initialSignup?: boolean })
     const email = String(data.get('email'));
     const password = String(data.get('password'));
     try {
-      const db = browserDb();
       const result = signup
-        ? await db.auth.signUp({
+        ? await authClient.signUp.email({
             email,
             password,
-            options: { emailRedirectTo: window.location.origin + '/auth/callback' },
+            name: String(data.get('name')),
           })
-        : await db.auth.signInWithPassword({ email, password });
+        : await authClient.signIn.email({ email, password });
       if (result.error) throw result.error;
-      if (signup && !result.data.session)
+      if (signup)
         setMessage(
           'Revisa tu correo y confirma tu cuenta. Después inicia sesión. Si tienes una invitación, vuelve a abrirla.',
         );
@@ -45,6 +44,18 @@ export function AuthForm({ initialSignup = false }: { initialSignup?: boolean })
       <h1 className="text-2xl font-bold">{signup ? 'Crea tu cuenta' : 'Qué gusto verte'}</h1>
       <p className="mb-6 mt-2 text-sm text-slate-500">Acceso seguro para talleres y clientes.</p>
       <form onSubmit={submit} className="space-y-4">
+        {signup && (
+          <Field label="Nombre completo">
+            <input
+              name="name"
+              autoComplete="name"
+              required
+              minLength={2}
+              maxLength={120}
+              className="field"
+            />
+          </Field>
+        )}
         <Field label="Correo electrónico">
           <input
             name="email"

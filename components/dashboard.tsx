@@ -13,8 +13,9 @@ import {
   Search,
   ClipboardList,
 } from 'lucide-react';
-import { browserDb } from '@/lib/supabase/client';
+import { authClient } from '@/lib/auth/client';
 import { mutate, errorText } from '@/lib/api';
+import { apiGet } from '@/lib/http';
 import { money, date } from '@/lib/format';
 import { Field, Notice, Badge } from './ui';
 import type { Workshop, Client, Vehicle, Product, Order } from '@/types/domain';
@@ -48,15 +49,9 @@ export function Dashboard({ email }: { email: string }) {
   useEffect(() => {
     async function start() {
       try {
-        const db = browserDb();
-        const { data, error } = await db
-          .from('workshop_members')
-          .select('workshop_id,role,workshops(id,name)');
-        if (error) throw error;
-        const ws = (data || []).map((m) => ({
-          ...(m.workshops as unknown as Workshop),
-          role: m.role as 'admin' | 'worker',
-        }));
+        const { workshops: ws } = await apiGet<{ workshops: Workshop[] }>(
+          '/api/app?resource=dashboard',
+        );
         setWorkshops(ws);
         setWid(ws[0]?.id || '');
       } catch {
@@ -73,31 +68,18 @@ export function Dashboard({ email }: { email: string }) {
     if (!wid) return;
     setLoading(true);
     try {
-      const db = browserDb();
-      const results = await Promise.all([
-        db.from('clients').select('*').eq('workshop_id', wid).order('name'),
-        db.from('vehicles').select('*').eq('workshop_id', wid),
-        db.from('inventory').select('*').eq('workshop_id', wid).order('name'),
-        db
-          .from('order_totals')
-          .select('*')
-          .eq('workshop_id', wid)
-          .order('created_at', { ascending: false }),
-      ]);
-      if (results.some((r) => r.error)) throw new Error('No pudimos cargar los datos del taller.');
-      setClients(results[0].data || []);
-      setVehicles(results[1].data || []);
-      setProducts(results[2].data || []);
-      setOrders(results[3].data || []);
-      if (admin) {
-        const r = await db
-          .from('invitations')
-          .select('id,email,role,expires_at,used_at')
-          .eq('workshop_id', wid)
-          .order('expires_at', { ascending: false });
-        if (r.error) throw r.error;
-        setInvites(r.data || []);
-      } else setInvites([]);
+      const data = await apiGet<{
+        clients: Client[];
+        vehicles: Vehicle[];
+        products: Product[];
+        orders: Order[];
+        invitations: Invite[];
+      }>('/api/app?resource=dashboard&workshop_id=' + encodeURIComponent(wid));
+      setClients(data.clients);
+      setVehicles(data.vehicles);
+      setProducts(data.products);
+      setOrders(data.orders);
+      setInvites(admin ? data.invitations : []);
     } catch {
       setError('No pudimos cargar los datos del taller. Intenta actualizar.');
     } finally {
@@ -199,7 +181,7 @@ export function Dashboard({ email }: { email: string }) {
           <button
             className="mt-4 flex items-center gap-2 text-xs"
             onClick={async () => {
-              await browserDb().auth.signOut();
+              await authClient.signOut();
               location.assign('/login');
             }}
           >

@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
-import { browserDb } from '@/lib/supabase/client';
+import { mutate } from '@/lib/api';
 import { Notice } from './ui';
 export function Invitation() {
   const [busy, setBusy] = useState(false),
@@ -27,11 +27,7 @@ export function Invitation() {
             try {
               const token = new URLSearchParams(location.hash.slice(1)).get('token');
               if (!token) throw new Error('Enlace incompleto.');
-              const { data, error } = await browserDb().rpc('app_mutate', {
-                action: 'accept_invite',
-                payload: { token },
-              });
-              if (error) throw error;
+              const data = await mutate('accept_invite', { token });
               location.replace(data.role === 'client' ? '/cuenta' : '/taller');
             } catch {
               setError(

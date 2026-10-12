@@ -12,8 +12,8 @@ import {
   Clock,
   RefreshCw,
 } from 'lucide-react';
-import { browserDb, publicDb } from '@/lib/supabase/client';
 import { errorText, mutate } from '@/lib/api';
+import { apiGet, apiPost } from '@/lib/http';
 import { money, labels, date } from '@/lib/format';
 import { messageTemplate, notificationLinks } from '@/lib/notifications';
 import { Field, Notice, Badge } from './ui';
@@ -50,46 +50,28 @@ export function OrderView({
     try {
       if (publicLink && !token)
         throw new Error('El enlace está incompleto. Pide al taller que te lo comparta de nuevo.');
-      const db = publicLink ? publicDb(token!) : browserDb();
-      const { data, error } = await db.rpc(
-        publicLink ? 'get_public_order' : 'get_order',
-        publicLink ? { token } : { order_id: id },
-      );
-      if (error || !data)
-        throw new Error(
-          publicLink
-            ? 'El enlace venció, fue revocado o no está disponible. Solicita uno nuevo al taller.'
-            : 'No pudimos abrir esta orden. Verifica que tu cuenta tenga acceso.',
+      if (publicLink) {
+        const data = await apiPost<{ detail: OrderDetail }>('/api/public-order', {
+          action: 'read',
+          token,
+        });
+        setDetail(data.detail);
+      } else {
+        const data = await apiGet<{
+          detail: OrderDetail;
+          products: Product[];
+          contact: Client | null;
+        }>(
+          '/api/app?resource=order&id=' +
+            encodeURIComponent(id || '') +
+            '&editor=' +
+            (editor ? '1' : '0'),
         );
-      const result = data as OrderDetail;
-      if (result.photos.length) {
-        const signed = await db.storage.from('service-photos').createSignedUrls(
-          result.photos.map((p) => p.path),
-          120,
-        );
-        if (signed.error)
-          throw new Error(
-            'No pudimos cargar las fotos. Actualiza la página para volver a intentar.',
-          );
-        result.photos = result.photos.map((p) => ({
-          ...p,
-          url: signed.data?.find((s) => s.path === p.path)?.signedUrl || undefined,
-        }));
-      }
-      setDetail(result);
-      if (editor) {
-        const [p, c] = await Promise.all([
-          db
-            .from('inventory')
-            .select('*')
-            .eq('workshop_id', result.order.workshop_id)
-            .order('name'),
-          db.from('clients').select('*').eq('id', result.order.client_id).single(),
-        ]);
-        if (p.error || c.error)
-          throw new Error('No pudimos cargar el inventario o los datos de contacto.');
-        setProducts(p.data || []);
-        setContact(c.data);
+        setDetail(data.detail);
+        if (editor) {
+          setProducts(data.products);
+          setContact(data.contact);
+        }
       }
     } catch (err) {
       setError(errorText(err));
@@ -140,34 +122,15 @@ export function OrderView({
       return;
     }
     setBusy(true);
-    const db = browserDb();
-    const extension =
-      file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/png' ? 'png' : 'webp';
-    const path =
-      detail.order.workshop_id +
-      '/' +
-      detail.order.id +
-      '/' +
-      crypto.randomUUID() +
-      '.' +
-      extension;
     try {
-      const { error } = await db.storage
-        .from('service-photos')
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (error)
-        throw new Error('No pudimos subir la foto. Verifica tu conexión y vuelve a intentar.');
-      try {
-        await mutate('add_photo', {
-          workshop_id: detail.order.workshop_id,
-          order_id: detail.order.id,
-          path,
-          caption,
-        });
-      } catch (err) {
-        await db.storage.from('service-photos').remove([path]);
-        throw err;
-      }
+      const form = new FormData();
+      form.set('file', file);
+      form.set('workshop_id', detail.order.workshop_id);
+      form.set('order_id', detail.order.id);
+      form.set('caption', caption);
+      const response = await fetch('/api/photos', { method: 'POST', body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No pudimos subir la foto.');
       setCaption('');
       setNotice('Foto agregada a la orden.');
       await reload();
@@ -190,18 +153,20 @@ export function OrderView({
     setBusy(true);
     setError('');
     try {
-      const db = publicLink ? publicDb(token!) : browserDb();
-      const { error } = await db.rpc('decide_order', {
-        order_id: detail.order.id,
-        decision,
-        token: publicLink ? token : null,
-      });
-      if (error)
-        throw new Error(
-          error.code === 'P0001'
-            ? error.message
-            : 'No pudimos guardar tu respuesta. Intenta de nuevo.',
-        );
+      if (publicLink) {
+        await apiPost('/api/public-order', {
+          action: 'decide',
+          token,
+          orderId: detail.order.id,
+          decision,
+        });
+      } else {
+        await mutate('decide', {
+          workshop_id: detail.order.workshop_id,
+          order_id: detail.order.id,
+          decision,
+        });
+      }
       setNotice('Tu respuesta quedó registrada.');
       await reload();
     } catch (err) {

@@ -10,23 +10,15 @@ const A = '10000000-0000-0000-0000-000000000001',
 test('Esquema, aislamiento, autorizaciones y reservas de Quality Motors', async (t) => {
   const db = new PGlite();
   await db.exec(`
- create role anon; create role authenticated;
- create schema auth; create schema storage;
- create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
- create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
- grant usage on schema auth,public,storage to anon,authenticated;
- grant execute on function auth.uid() to anon,authenticated;
- create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
- create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);
- alter table storage.objects enable row level security;
- grant select,insert,delete on storage.objects to anon,authenticated;
- insert into auth.users values ('${A}','admin@taller.mx',now()),('${B}','otro@taller.mx',now()),('${C}','cliente@correo.mx',now()),('${D}','worker@taller.mx',now()),('${U}','sinconfirmar@correo.mx',null);
+ create schema neon_auth;
+ create table neon_auth.user(id uuid primary key,email text,"emailVerified" boolean not null default false);
+ insert into neon_auth.user values ('${A}','admin@taller.mx',true),('${B}','otro@taller.mx',true),('${C}','cliente@correo.mx',true),('${D}','worker@taller.mx',true),('${U}','sinconfirmar@correo.mx',false);
  `);
   await db.exec(await readFile(new URL('../schema.sql', import.meta.url), 'utf8'));
   async function as(user: string | null) {
     await db.exec('reset role');
-    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [user || '']);
-    await db.exec('set role ' + (user ? 'authenticated' : 'anon'));
+    await db.query("select set_config('app.user_id',$1,false)", [user || '']);
+    await db.exec('set role quality_motors_app');
   }
   async function rpc(action: string, payload: object): Promise<any> {
     const r = await db.query<{ value: any }>('select public.app_mutate($1,$2::jsonb) value', [
@@ -218,38 +210,35 @@ test('Esquema, aislamiento, autorizaciones y reservas de Quality Motors', async 
     const d = await scalar('select public.get_public_order($1)', [token]);
     assert.equal(d.order.id, o);
     assert.equal(d.order.total, 929.16);
-    await assert.rejects(db.query('select * from public.clients'), /permission denied/);
+    assert.equal(await scalar('select count(*) from public.clients'), 0);
     await assert.rejects(
       db.query('select public.get_public_order($1)', ['a'.repeat(64)]),
       /venció/,
     );
     await as(A);
   });
-  await t.test('Storage permite sólo evidencia del taller y de la orden autorizada', async () => {
-    const path = w + '/' + o + '/prueba.jpg';
-    await db.query("insert into storage.objects(bucket_id,name) values('service-photos',$1)", [
-      path,
-    ]);
-    await rpc('add_photo', { workshop_id: w, order_id: o, path, caption: 'Balata desgastada' });
-    await as(B);
-    assert.equal(await scalar('select count(*) from storage.objects'), 0);
-    await assert.rejects(
-      db.query("insert into storage.objects(bucket_id,name) values('service-photos',$1)", [
-        path + '/ajena',
-      ]),
-      /row-level security/,
-    );
-    await as(null);
-    assert.equal(await scalar('select count(*) from storage.objects'), 0);
-    await db.query("select set_config('request.headers',$1,false)", [
-      JSON.stringify({ 'x-order-token': token }),
-    ]);
-    assert.equal(await scalar('select count(*) from storage.objects'), 1);
-    await db.query("select set_config('request.headers','{}',false)");
-    await as(C);
-    assert.equal(await scalar('select count(*) from storage.objects'), 1);
-    await as(A);
-  });
+  await t.test(
+    'La evidencia exige una ruta del taller y respeta el acceso a la orden',
+    async () => {
+      const path = w + '/' + o + '/prueba.jpg';
+      await rpc('add_photo', { workshop_id: w, order_id: o, path, caption: 'Balata desgastada' });
+      await as(B);
+      assert.equal(await scalar('select count(*) from public.service_photos'), 0);
+      await assert.rejects(
+        rpc('add_photo', {
+          workshop_id: w,
+          order_id: o,
+          path: w + '/' + o + '/ajena.jpg',
+          caption: 'Ajena',
+        }),
+        /acceso/,
+      );
+      await as(null);
+      const publicDetail = await scalar('select public.get_public_order($1)', [token]);
+      assert.equal(publicDetail.photos[0].path, path);
+      await as(A);
+    },
+  );
   await t.test('No acepta respuestas con token de otra orden ni de otro cliente', async () => {
     const other = (
       await rpc('create_order', {
