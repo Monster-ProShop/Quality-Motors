@@ -7,6 +7,7 @@ import { apiGet } from '@/lib/http';
 import { Badge, Notice, Field } from './ui';
 import { money } from '@/lib/format';
 import type { Order } from '@/types/domain';
+import { BrandLogo, WorkshopContact } from './brand';
 export function Account({ email }: { email: string }) {
   const [orders, setOrders] = useState<Order[]>([]),
     [error, setError] = useState(''),
@@ -18,11 +19,9 @@ export function Account({ email }: { email: string }) {
   }, []);
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-10">
-      <header className="flex flex-wrap justify-between gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <Link href="/" className="font-bold text-emerald-700">
-            Quality Motors
-          </Link>
+          <Link href="/"><BrandLogo compact /></Link>
           <h1 className="mt-3 text-3xl font-bold">Mi cuenta</h1>
           <p className="mt-2 text-slate-500">{email}</p>
         </div>
@@ -42,6 +41,7 @@ export function Account({ email }: { email: string }) {
         </div>
       </header>
       {error && <Notice error>{error}</Notice>}
+      <WorkshopContact />
       <section className="card">
         <h2 className="mb-4 text-xl font-bold">Mis servicios</h2>
         {orders.length === 0 ? (
@@ -53,7 +53,7 @@ export function Account({ email }: { email: string }) {
           <div className="space-y-3">
             {orders.map((o) => (
               <Link
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 hover:border-emerald-500"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 hover:border-red-500"
                 key={o.id}
                 href={'/cuenta/orden/' + o.id}
               >

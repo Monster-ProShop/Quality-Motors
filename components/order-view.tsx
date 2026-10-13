@@ -18,6 +18,7 @@ import { money, labels, date } from '@/lib/format';
 import { messageTemplate, notificationLinks } from '@/lib/notifications';
 import { Field, Notice, Badge } from './ui';
 import type { OrderDetail, Product, ItemKind, Client } from '@/types/domain';
+import { BrandLogo, WorkshopContact } from './brand';
 export function OrderView({
   id,
   editor = false,
@@ -200,7 +201,7 @@ export function OrderView({
           className="flex items-center gap-2 text-sm font-semibold text-slate-500"
         >
           <ArrowLeft size={17} />
-          {editor ? 'Volver al taller' : 'Quality Motors'}
+          {editor ? 'Volver al taller' : <BrandLogo compact />}
         </Link>
         <button className="btn-secondary" disabled={busy || loading} onClick={() => void reload()}>
           <RefreshCw size={15} />
@@ -627,16 +628,19 @@ export function OrderView({
                 </section>
               )}
               {!editor && (
-                <section className="rounded-xl bg-emerald-50 p-5 text-sm text-emerald-900">
-                  <h2 className="font-semibold">Tu servicio, siempre a la vista</h2>
-                  <p className="mt-2 leading-relaxed">
-                    Puedes revisar aquí las fotos y las guías de tus refacciones. Para consultar tus
-                    servicios desde una cuenta, pide una invitación al taller.
-                  </p>
-                  <Link className="mt-3 inline-block underline" href="/cuenta">
-                    Ir a mi cuenta
-                  </Link>
-                </section>
+                <>
+                  <section className="rounded-xl bg-red-50 p-5 text-sm text-red-950">
+                    <h2 className="font-semibold">Tu servicio, siempre a la vista</h2>
+                    <p className="mt-2 leading-relaxed">
+                      Puedes revisar aquí las fotos y las guías de tus refacciones. Para consultar tus
+                      servicios desde una cuenta, pide una invitación al taller.
+                    </p>
+                    <Link className="mt-3 inline-block font-semibold underline" href="/cuenta">
+                      Ir a mi cuenta
+                    </Link>
+                  </section>
+                  <WorkshopContact />
+                </>
               )}
             </aside>
           </div>

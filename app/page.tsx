@@ -1,64 +1,59 @@
 import Link from 'next/link';
-import { Wrench, ArrowRight, ShieldCheck, Camera, ClipboardList } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Camera, ClipboardList, MapPin, Phone } from 'lucide-react';
+import { BrandLogo, workshop } from '@/components/brand';
 export default function Home() {
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <header className="flex items-center justify-between">
-        <span className="flex items-center gap-3 text-xl font-bold">
-          <Wrench className="text-emerald-700" />
-          Quality Motors
-        </span>
+    <main className="min-h-screen bg-white">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
+        <BrandLogo compact />
         <Link className="btn-secondary" href="/login">
           Iniciar sesión
         </Link>
       </header>
-      <section className="grid items-center gap-12 py-24 md:grid-cols-2">
-        <div>
-          <p className="mb-5 text-sm font-bold uppercase tracking-widest text-emerald-700">
-            Del diagnóstico a la entrega
-          </p>
-          <h1 className="text-5xl font-bold leading-tight tracking-tight">
-            Tu taller,
-            <br />
-            en orden.
-          </h1>
-          <p className="my-6 max-w-lg text-lg leading-relaxed text-slate-500">
-            Menos pendientes. Más confianza. Cotiza, organiza tus refacciones y comparte cada avance
-            con tus clientes en un solo lugar.
-          </p>
-          <Link href="/login?registro=1" className="btn">
-            Crear mi cuenta <ArrowRight size={18} />
-          </Link>
-          <Link href="/taller" className="ml-4 inline-block text-sm font-semibold text-emerald-800">
-            Ir al taller
-          </Link>
-        </div>
-        <div className="rounded-3xl bg-slate-900 p-8 text-white">
-          <div className="flex items-center gap-3 border-b border-slate-700 pb-5">
-            <Wrench size={28} />
-            <div>
-              <p className="font-bold">QUALITY MOTORS</p>
-              <p className="text-sm text-slate-400">Gestión de talleres</p>
+      <section className="border-y border-slate-200 bg-slate-950 text-white">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[1.1fr_.9fr] lg:py-28">
+          <div>
+            <p className="mb-5 text-sm font-bold uppercase tracking-[0.22em] text-red-500">
+              Mecánica con transparencia
+            </p>
+            <h1 className="max-w-2xl text-5xl font-black leading-[1.05] tracking-tight sm:text-6xl">
+              Tu auto en buenas manos.
+            </h1>
+            <p className="my-7 max-w-xl text-lg leading-relaxed text-slate-300">
+              Consulta cotizaciones, autoriza trabajos y sigue el avance de tu servicio con fotos y
+              datos claros, desde cualquier dispositivo.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/login" className="btn">
+                Entrar a mi portal <ArrowRight size={18} />
+              </Link>
+              <Link href="/login?registro=1" className="btn-dark">
+                Crear cuenta
+              </Link>
             </div>
           </div>
-          <div className="space-y-7 py-8">
+          <div className="rounded-3xl border border-white/10 bg-white/[.04] p-7 shadow-2xl shadow-black/20 sm:p-9">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-red-500">Nuestro compromiso</p>
+            <div className="mt-7 space-y-7">
             {[
               [
                 ClipboardList,
-                'Cada concepto, claro',
-                'Mano de obra y refacciones en una cotización.',
+                'Cotizaciones claras',
+                'Mano de obra y refacciones desglosadas antes de autorizar.',
               ],
-              [Camera, 'El avance a la vista', 'Fotos del trabajo, directamente desde el celular.'],
+              [Camera, 'Evidencia del servicio', 'Revisa fotografías y avances del trabajo desde tu portal.'],
               [
                 ShieldCheck,
-                'La confianza se construye',
-                'Autorización del cliente y acceso privado por taller.',
+                'Acceso protegido',
+                'Tu historial y tus decisiones quedan disponibles sólo para ti.',
               ],
             ].map(([Icon, title, copy]) => {
-              const I = Icon as typeof Wrench;
+              const I = Icon as typeof ClipboardList;
               return (
                 <div key={String(title)} className="flex gap-4">
-                  <I className="shrink-0 text-emerald-400" />
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-red-600/15">
+                    <I className="text-red-500" size={22} />
+                  </span>
                   <div>
                     <p className="font-semibold">{String(title)}</p>
                     <p className="mt-1 text-sm text-slate-400">{String(copy)}</p>
@@ -66,11 +61,18 @@ export default function Home() {
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
       </section>
-      <footer className="border-t border-slate-200 py-6 text-sm text-slate-500">
-        Hecho para el ritmo de tu taller. Importes en pesos mexicanos.
+      <footer className="mx-auto grid max-w-6xl gap-6 px-5 py-8 text-sm text-slate-600 sm:px-8 md:grid-cols-[1fr_auto] md:items-center">
+        <div>
+          <p className="font-bold text-slate-900">{workshop.name} · Taller acreditado</p>
+          <p className="mt-2 flex items-center gap-2"><MapPin size={16} className="text-red-600" />{workshop.address}</p>
+        </div>
+        <a className="flex items-center gap-2 font-bold text-red-700" href={workshop.phoneHref}>
+          <Phone size={17} /> {workshop.phone}
+        </a>
       </footer>
     </main>
   );

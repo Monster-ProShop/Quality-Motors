@@ -129,7 +129,7 @@ export function Dashboard({ email }: { email: string }) {
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="bg-slate-950 p-5 text-slate-300 lg:sticky lg:top-0 lg:h-screen">
         <Link href="/" className="mb-8 flex items-center gap-3 text-lg font-bold text-white">
-          <span className="rounded-lg bg-emerald-500 p-2">
+          <span className="rounded-lg bg-red-600 p-2">
             <Wrench size={22} />
           </span>
           Quality Motors
@@ -166,7 +166,7 @@ export function Dashboard({ email }: { email: string }) {
                   setNotice('');
                   setError('');
                 }}
-                className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm lg:w-full ${tab === n.id ? 'bg-emerald-500/15 text-emerald-300' : 'hover:bg-slate-800'}`}
+                className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm lg:w-full ${tab === n.id ? 'bg-red-500/15 text-red-300' : 'hover:bg-slate-800'}`}
               >
                 <n.icon size={18} />
                 {n.label}

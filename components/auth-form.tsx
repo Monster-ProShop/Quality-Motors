@@ -89,7 +89,7 @@ export function AuthForm({ initialSignup = false }: { initialSignup?: boolean })
         </button>
       </form>
       <button
-        className="mt-5 text-sm font-semibold text-emerald-700"
+        className="mt-5 text-sm font-semibold text-red-700"
         onClick={() => {
           setSignup(!signup);
           setError('');
